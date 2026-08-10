@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-import sqlite3
+import sqlite3, hashlib
 
 app = Flask(__name__)
 
@@ -28,11 +28,12 @@ def register():
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
+    hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
     conn = get_db_connection()
     conn.execute(
         "INSERT INTO agent (username, password_hash) VALUES (?, ?)",
-        (username, password)
+        (username, hashed_password)
     )
     conn.commit()
     conn.close()
