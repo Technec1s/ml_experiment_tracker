@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 DATABASE = "experiments.db"
 
+
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.execute("""
@@ -26,6 +27,7 @@ def get_db_connection():
     """)
     return conn
 
+
 @app.route("/api/experiment")
 def sample_experiment():
     experiment = {
@@ -35,35 +37,59 @@ def sample_experiment():
     }
     return jsonify(experiment)
 
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "no data provided"}), 400
+
     username = data.get("username")
     password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+
     hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
     conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO agent (username, password_hash) VALUES (?, ?)",
-        (username, hashed_password)
-    )
-    conn.commit()
+    try:
+        conn.execute(
+            "INSERT INTO agent (username, password_hash) VALUES (?, ?)",
+            (username, hashed_password)
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "username already taken"}), 409
     conn.close()
 
     return jsonify({"message": "agent registered", "username": username}), 201
 
+
 @app.route("/upload-experiment", methods=["POST"])
 def upload_experiment():
     data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "no data provided"}), 400
+
     title = data.get("title")
     filename = data.get("filename")
+
+    if not title or not filename:
+        return jsonify({"error": "title and filename are required"}), 400
 
     if not os.path.exists(filename):
         return jsonify({"error": "file not found"}), 400
 
-    df = pd.read_csv(filename)
-    best_accuracy = df["accuracy"].max()
-    final_loss = df["loss"].iloc[-1]
+    try:
+        df = pd.read_csv(filename)
+        best_accuracy = df["accuracy"].max()
+        final_loss = df["loss"].iloc[-1]
+    except KeyError as e:
+        return jsonify({"error": f"missing expected column: {e}"}), 400
 
     conn = get_db_connection()
     conn.execute(
@@ -78,6 +104,7 @@ def upload_experiment():
         "best_accuracy": best_accuracy,
         "final_loss": final_loss
     }), 201
+
 
 if __name__ == "__main__":
     app.run(debug=True)
